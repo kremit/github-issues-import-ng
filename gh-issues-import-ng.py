@@ -83,6 +83,7 @@ def init_config():
     include_group.add_argument("--open", dest='import_open', action='store_true', help="Import only open issues.")
     include_group.add_argument("--closed", dest='import_closed', action='store_true', help="Import only closed issues.")
     include_group.add_argument("-i", "--issues", type=int, nargs='+', help="The list of issues to import.")
+    include_group.add_argument('--labels', help="Import only issues with a specific label (comma separated if multiple).")
 
     args = arg_parser.parse_args()
 
@@ -138,6 +139,7 @@ def init_config():
 
     config.set('settings', 'import-open-issues', str(args.import_all or args.import_open))
     config.set('settings', 'import-closed-issues', str(args.import_all or args.import_closed))
+    if args.labels: config.set('settings', 'labels', args.labels)
 
     # Make sure no required config values are missing
     if not config.has_option('source', 'repository'):
@@ -310,6 +312,17 @@ def get_issues_by_state(which, state):
         issues.extend(new_issues)
         page += 1
     return issues
+    
+def get_issues_by_label(which, label):
+    issues = []
+    page = 1
+    while True:
+        new_issues = send_request(which, "issues?state=all&labels=%s&direction=asc&page=%d" % (label, page))
+        if not new_issues:
+            break
+        issues.extend(new_issues)
+        page += 1
+    return issues
 
 
 def get_comments_on_issue(which, issue):
@@ -327,7 +340,7 @@ def import_milestone(source):
         "due_on": source['due_on']
     }
 
-    result_milestone = send_request('target', "milestones", source)
+    result_milestone = send_request('target', 'milestones', data)
     print("Successfully created milestone '%s'" % result_milestone['title'])
     return result_milestone
 
@@ -338,7 +351,7 @@ def import_label(source):
         "color": source['color']
     }
 
-    result_label = send_request('target', "labels", source)
+    result_label = send_request('target', 'labels', data)
     print("Successfully created label '%s'" % result_label['name'])
     return result_label
 
@@ -546,6 +559,9 @@ if __name__ == '__main__':
 
     if config.getboolean('settings', 'import-closed-issues'):
         issues += get_issues_by_state('source', 'closed')
+        
+    if config.has_option('settings', 'labels'):
+        issues += get_issues_by_label('source', config.get('settings', 'labels'))
 
     # Sort issues based on their original `id` field
     # Confusing, but taken from http://stackoverflow.com/a/2878123/617937
